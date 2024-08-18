@@ -1,0 +1,5 @@
+youtube-dl
+openai-whisper
+ollama
+flask
+tqdm
