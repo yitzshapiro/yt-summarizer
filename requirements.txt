@@ -1,5 +1,6 @@
-youtube-dl
 openai-whisper
 ollama
 flask
 tqdm
+yt-dlp
+flask-cors
