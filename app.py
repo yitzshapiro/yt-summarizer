@@ -30,7 +30,7 @@ def download_audio(url):
 
 # Function to transcribe audio using Whisper
 def transcribe_audio(filename):
-    model = whisper.load_model("small")
+    model = whisper.load_model("base")
     result = model.transcribe(filename)
     return result["text"]
 
@@ -41,7 +41,7 @@ def summarize_text(text):
         messages=[
             {
                 'role': 'user',
-                'content': f'Summarize the following text: {text}',
+                'content': f'Summarize the following text into markdown formatting: {text}',
             }
         ]
     )
