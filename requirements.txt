@@ -1,6 +1,3 @@
-openai-whisper
+openai-whisper==20231117
 ollama
-flask
-tqdm
 yt-dlp
-flask-cors
