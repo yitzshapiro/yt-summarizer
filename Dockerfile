@@ -1,70 +1,59 @@
-# Stage 1: Build the frontend
-FROM node:18-alpine AS frontend-builder
+# Stage 1: Build Frontend
+FROM node:18 AS frontend-builder
 
-# Set the working directory
+WORKDIR /app/frontend
+
+COPY ./yt-frontend/package.json ./yt-frontend/pnpm-lock.yaml ./
+COPY ./yt-frontend ./
+
+RUN npm install -g pnpm
+RUN pnpm install
+RUN pnpm build
+
+# Stage 2: Build Backend
+FROM python:3.9-slim AS backend-builder
+
 WORKDIR /app
 
-# Copy the frontend code
-COPY ./yt-frontend .
+# Copy Go files for the backend
+COPY ./main.go ./go.mod ./
 
-# Install dependencies and build the frontend
-RUN npm install && npm run build
+# Install Go and build the Go application
+RUN apt-get update && apt-get install -y golang
+RUN CGO_ENABLED=0 go build -o /app/server
 
-# Stage 2: Build the backend and serve the frontend
-FROM python:3.9-slim AS backend
+# Install system-wide dependencies
+RUN apt-get update && apt-get install -y ffmpeg curl
 
-# Install Go, Node.js, npm, and other necessary packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    golang-go \
-    nodejs \
-    npm \
-    yt-dlp \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python dependencies system-wide, including Whisper
+RUN pip install --upgrade pip
+RUN pip install openai-whisper yt-dlp
 
-# Install http-server globally to serve the frontend
-RUN npm install -g http-server
+# Copy the Python scripts
+COPY ./summarize.py ./transcribe.py ./
 
-# Set the working directory for the Go backend
-WORKDIR /go/src/app
+# Stage 3: Production Environment
+FROM python:3.9-slim
 
-# Copy go.mod and go.sum files first
-COPY ./go.mod ./
-
-# Download Go dependencies
-RUN go mod download
-
-# Copy the Go backend code
-COPY ./main.go .
-
-# Build the Go backend
-RUN go build -o /app/main
-
-# Set the working directory for Python scripts
 WORKDIR /app
 
-# Copy the Python scripts and requirements.txt
-COPY ./summarize.py .
-COPY ./transcribe.py .
-COPY ./requirements.txt .
+# Install necessary packages system-wide
+RUN apt-get update && apt-get install -y ffmpeg curl
 
-# Install Python dependencies, including torch
-RUN python3 -m venv venv && \
-    . ./venv/bin/activate && \
-    pip install --upgrade pip && \
-    pip install --no-cache-dir torch && \
-    pip install --no-cache-dir -r requirements.txt
+# Install Ollama and pull the model
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
-# Copy the frontend build from Stage 1
-COPY --from=frontend-builder /app/dist /app/yt-frontend/dist
+# Copy the backend server and Python scripts
+COPY --from=backend-builder /app/server /app/server
+COPY --from=backend-builder /app/summarize.py /app/summarize.py
+COPY --from=backend-builder /app/transcribe.py /app/transcribe.py
 
-# Ensure the virtual environment is activated when running the Go application
-ENV VIRTUAL_ENV=/app/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# Copy the frontend build
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# Start both the backend and the frontend servers
-CMD ["sh", "-c", "./main & http-server /app/yt-frontend/dist -p 5137"]
-
-# Expose the ports for both frontend and backend
+# Expose ports for frontend and backend
 EXPOSE 5001
-EXPOSE 5137
+EXPOSE 8080
+
+# Start all services
+CMD ["sh", "-c", "ollama serve & sleep 5 && ollama pull qwen2:1.5b && ./server & python3 -m http.server --directory /app/frontend/dist 8080"]

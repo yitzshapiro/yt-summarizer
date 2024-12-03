@@ -1,10 +1,12 @@
 import whisper
 import sys
 
+
 def transcribe_audio(filename):
     model = whisper.load_model("tiny")
     result = model.transcribe(filename)
     return result["text"]
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
